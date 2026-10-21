@@ -1,0 +1,6 @@
+pandas
+numpy
+pymongo
+requests
+beautifulsoup4
+dnspython
