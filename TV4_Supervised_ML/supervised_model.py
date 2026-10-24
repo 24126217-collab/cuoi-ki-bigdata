@@ -98,3 +98,31 @@ def predict_cancellation(items, order_date, previous_orders):
                   else "Completed",
         "cancel_probability": round(probability, 4)
     }
+if __name__ == "__main__":
+    print("--- KIỂM THỬ MÔ HÌNH CÓ GIÁM SÁT (TV4) ---")
+    
+    # 1. Tạo dữ liệu mẫu đơn hàng
+    sample_items = [
+        {"product_id": "P101", "quantity": 2, "price": 250000},
+        {"product_id": "P102", "quantity": 1, "price": 500000}
+    ]
+    sample_date = "2026-10-24 14:30:00"
+    sample_previous_orders = 5
+
+    try:
+        # 2. Test hàm dự đoán giá trị đơn hàng
+        val_pred = predict_order_value(sample_items)
+        print(f"💰 Giá trị đơn hàng dự đoán: {val_pred:,.0f} VNĐ")
+
+        # 3. Test hàm dự đoán khả năng hủy đơn
+        cancel_pred = predict_cancellation(sample_items, sample_date, sample_previous_orders)
+        print(f"⚠️ Dự đoán trạng thái: {cancel_pred['status']}")
+        print(f"📊 Xác suất hủy đơn: {cancel_pred['cancel_probability'] * 100:.2f}%")
+
+        print("\n✅ Mô hình TV4 hoạt động bình thường!")
+
+    except FileNotFoundError as e:
+        print(f"\n❌ Chưa tìm thấy file model `.joblib`: {e}")
+        print("👉 Bạn cần chạy file huấn luyện (train model) trước để tạo thư mục `models/` chứa các file .joblib!")
+    except Exception as e:
+        print(f"\n❌ Lỗi phát sinh: {e}")
