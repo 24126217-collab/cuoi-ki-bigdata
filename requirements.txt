@@ -1,6 +1,10 @@
 pandas
-numpy
 pymongo
-requests
-beautifulsoup4
 dnspython
+scikit-learn
+matplotlib
+seaborn
+joblib
+mlxtend
+openpyxl
+fpdf2
