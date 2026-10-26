@@ -158,9 +158,12 @@ with tab2:
                 "Mã khách hàng (customer_id)", value="101"
             )
             name = st.text_input("Tên khách hàng (name)", value="Nguyễn Văn A")
-          with col2:
             email = st.text_input("Email", value="nguyenvana@gmail.com")
+          with col2:
             phone = st.text_input("Số điện thoại (phone)", value="0901234567")
+            address = st.text_input(
+                "Địa chỉ (address)", value="Số 1 Lê Văn Sỹ, Quận 1, TP.HCM"
+            )
 
           submitted = st.form_submit_button("Thêm bản ghi")
           if submitted and db is not None:
@@ -172,6 +175,7 @@ with tab2:
                   "name": name,
                   "email": email,
                   "phone": phone,
+                  "address": address,
               }
               db[selected_collection].insert_one(new_doc)
               st.success("Thêm bản ghi mới vào clean_customers thành công!")
@@ -187,17 +191,21 @@ with tab2:
                 "Mã khách hàng (customer_id)", value="101"
             )
             order_date = st.text_input(
-                "Ngày đặt (order_date)", value="2026-06-15"
+                "Ngày đặt (order_date)", value="2026-06-15 12:00:00"
             )
           with col2:
-            order_value = st.number_input(
-                "Giá trị đơn hàng (order_value)",
-                min_value=0.0,
-                value=1250000.0,
-            )
             status = st.selectbox(
                 "Trạng thái (status)",
                 ["Completed", "Pending", "Cancelled", "shipped"],
+            )
+            shipping_address = st.text_input(
+                "Địa chỉ giao hàng (shipping_address)",
+                value="456 Lê Duẩn, Đà Nẵng",
+            )
+            total_amount = st.number_input(
+                "Tổng tiền (total_amount / order_value)",
+                min_value=0.0,
+                value=570000.0,
             )
 
           submitted = st.form_submit_button("Thêm bản ghi")
@@ -209,8 +217,9 @@ with tab2:
                       int(customer_id) if customer_id.isdigit() else customer_id
                   ),
                   "order_date": order_date,
-                  "order_value": order_value,
                   "status": status,
+                  "shipping_address": shipping_address,
+                  "total_amount": total_amount,
               }
               db[selected_collection].insert_one(new_doc)
               st.success("Thêm bản ghi mới vào clean_orders thành công!")
@@ -252,7 +261,7 @@ with tab2:
             except Exception as e:
               st.error(f"Thêm bản ghi thất bại! Lỗi: {e}")
 
-        else:  # clean_reviews
+        else:
           col1, col2 = st.columns(2)
           with col1:
             review_id = st.text_input("Mã đánh giá (review_id)", value="901")
@@ -292,157 +301,43 @@ with tab2:
     st.subheader(f"Cập nhật thông tin trong {selected_collection}")
     if is_admin:
       with st.form("update_record_form"):
-        if selected_collection == "clean_customers":
-          target_id = st.text_input(
-              "Nhập mã khách hàng cần sửa (customer_id)", value="60"
+        target_id = st.text_input(
+            "Nhập mã bản ghi cần sửa (customer_id, order_id, product_id hoặc"
+            " review_id)"
+        )
+        col1, col2 = st.columns(2)
+        with col1:
+          field_name = st.text_input(
+              "Tên trường cần cập nhật (ví dụ: name, status, price)"
           )
-          col1, col2 = st.columns(2)
-          with col1:
-            field_name = st.selectbox(
-                "Chọn trường cần sửa", ["name", "email", "phone"]
+        with col2:
+          new_value = st.text_input("Giá trị mới")
+
+        submit_update = st.form_submit_button("Xác nhận cập nhật")
+        if submit_update and db is not None:
+          try:
+            t_id = target_id.strip()
+            conditions = [{id_field: t_id} for id_field in ["customer_id", "order_id", "product_id", "review_id", "_id"]]
+            if t_id.isdigit():
+              conditions.extend([{id_field: int(t_id)} for id_field in ["customer_id", "order_id", "product_id", "review_id"]])
+            if len(t_id) == 24:
+              try:
+                conditions.append({"_id": ObjectId(t_id)})
+              except Exception:
+                pass
+
+            res = db[selected_collection].update_many(
+                {"$or": conditions}, {"$set": {field_name: new_value}}
             )
-          with col2:
-            new_value = st.text_input("Giá trị mới")
-
-          submit_update = st.form_submit_button("Xác nhận cập nhật")
-          if submit_update and db is not None:
-            try:
-              t_id = target_id.strip()
-              conditions = [{"customer_id": t_id}]
-              if t_id.isdigit():
-                conditions.append({"customer_id": int(t_id)})
-              if len(t_id) == 24:
-                try:
-                  conditions.append({"_id": ObjectId(t_id)})
-                except Exception:
-                  pass
-
-              res = db[selected_collection].update_many(
-                  {"$or": conditions}, {"$set": {field_name: new_value}}
+            if res.modified_count > 0 or res.matched_count > 0:
+              st.success(
+                  f"Cập nhật thông tin trong {selected_collection} thành công!"
               )
-              if res.modified_count > 0 or res.matched_count > 0:
-                st.success(
-                    "Cập nhật thông tin trong clean_customers thành công!"
-                )
-                st.rerun()
-              else:
-                st.error("Không tìm thấy mã khách hàng tương ứng để cập nhật.")
-            except Exception as e:
-              st.error(f"Cập nhật thất bại! Lỗi: {e}")
-
-        elif selected_collection == "clean_orders":
-          target_id = st.text_input(
-              "Nhập mã đơn hàng cần sửa (order_id)", value="5001"
-          )
-          col1, col2 = st.columns(2)
-          with col1:
-            field_name = st.selectbox(
-                "Chọn trường cần sửa",
-                ["status", "order_value", "order_date"],
-            )
-          with col2:
-            new_value = st.text_input("Giá trị mới")
-
-          submit_update = st.form_submit_button("Xác nhận cập nhật")
-          if submit_update and db is not None:
-            try:
-              t_id = target_id.strip()
-              conditions = [{"order_id": t_id}]
-              if t_id.isdigit():
-                conditions.append({"order_id": int(t_id)})
-              if len(t_id) == 24:
-                try:
-                  conditions.append({"_id": ObjectId(t_id)})
-                except Exception:
-                  pass
-
-              res = db[selected_collection].update_many(
-                  {"$or": conditions}, {"$set": {field_name: new_value}}
-              )
-              if res.modified_count > 0 or res.matched_count > 0:
-                st.success("Cập nhật thông tin trong clean_orders thành công!")
-                st.rerun()
-              else:
-                st.error("Không tìm thấy mã đơn hàng tương ứng để cập nhật.")
-            except Exception as e:
-              st.error(f"Cập nhật thất bại! Lỗi: {e}")
-
-        elif selected_collection == "clean_products":
-          target_id = st.text_input(
-              "Nhập mã sản phẩm cần sửa (product_id)", value="301"
-          )
-          col1, col2 = st.columns(2)
-          with col1:
-            field_name = st.selectbox(
-                "Chọn trường cần sửa",
-                ["product_name", "price", "category"],
-            )
-          with col2:
-            new_value = st.text_input("Giá trị mới")
-
-          submit_update = st.form_submit_button("Xác nhận cập nhật")
-          if submit_update and db is not None:
-            try:
-              t_id = target_id.strip()
-              conditions = [{"product_id": t_id}]
-              if t_id.isdigit():
-                conditions.append({"product_id": int(t_id)})
-              if len(t_id) == 24:
-                try:
-                  conditions.append({"_id": ObjectId(t_id)})
-                except Exception:
-                  pass
-
-              res = db[selected_collection].update_many(
-                  {"$or": conditions}, {"$set": {field_name: new_value}}
-              )
-              if res.modified_count > 0 or res.matched_count > 0:
-                st.success(
-                    "Cập nhật thông tin trong clean_products thành công!"
-                )
-                st.rerun()
-              else:
-                st.error("Không tìm thấy mã sản phẩm tương ứng để cập nhật.")
-            except Exception as e:
-              st.error(f"Cập nhật thất bại! Lỗi: {e}")
-
-        else:  # clean_reviews
-          target_id = st.text_input(
-              "Nhập mã đánh giá cần sửa (review_id)", value="901"
-          )
-          col1, col2 = st.columns(2)
-          with col1:
-            field_name = st.selectbox(
-                "Chọn trường cần sửa", ["rating", "comment"]
-            )
-          with col2:
-            new_value = st.text_input("Giá trị mới")
-
-          submit_update = st.form_submit_button("Xác nhận cập nhật")
-          if submit_update and db is not None:
-            try:
-              t_id = target_id.strip()
-              conditions = [{"review_id": t_id}]
-              if t_id.isdigit():
-                conditions.append({"review_id": int(t_id)})
-              if len(t_id) == 24:
-                try:
-                  conditions.append({"_id": ObjectId(t_id)})
-                except Exception:
-                  pass
-
-              res = db[selected_collection].update_many(
-                  {"$or": conditions}, {"$set": {field_name: new_value}}
-              )
-              if res.modified_count > 0 or res.matched_count > 0:
-                st.success(
-                    "Cập nhật thông tin trong clean_reviews thành công!"
-                )
-                st.rerun()
-              else:
-                st.error("Không tìm thấy mã đánh giá tương ứng để cập nhật.")
-            except Exception as e:
-              st.error(f"Cập nhật thất bại! Lỗi: {e}")
+              st.rerun()
+            else:
+              st.error("Không tìm thấy mã ID tương ứng để cập nhật.")
+          except Exception as e:
+            st.error(f"Cập nhật thất bại! Lỗi: {e}")
     else:
       st.warning(
           "Vui lòng đăng nhập tài khoản Admin tại Tab 'Hệ Thống & Quản Trị' để"
@@ -462,15 +357,27 @@ with tab2:
         if submit_delete and db is not None:
           try:
             t_id = delete_id.strip()
-            conditions = [{"customer_id": t_id}, {"order_id": t_id}, {"_id": t_id}]
+            conditions = [
+                {"customer_id": t_id},
+                {"order_id": t_id},
+                {"product_id": t_id},
+                {"review_id": t_id},
+            ]
             if t_id.isdigit():
-              conditions.extend([{"customer_id": int(t_id)}, {"order_id": int(t_id)}])
+              conditions.extend([
+                  {"customer_id": int(t_id)},
+                  {"order_id": int(t_id)},
+                  {"product_id": int(t_id)},
+                  {"review_id": int(t_id)},
+              ])
 
             if len(t_id) == 24:
               try:
                 conditions.append({"_id": ObjectId(t_id)})
               except Exception:
                 pass
+            else:
+              conditions.append({"_id": t_id})
 
             res = db[selected_collection].delete_many({"$or": conditions})
             if res.deleted_count > 0:
