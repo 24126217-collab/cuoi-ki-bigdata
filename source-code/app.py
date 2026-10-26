@@ -103,7 +103,6 @@ with tab2:
         "Khu vực cho phép Thêm, Xem, Sửa, Xóa dữ liệu trực tiếp trong CSDL MongoDB Cloud."
     )
 
-    # Hiển thị thông báo thành công sau khi rerun (nếu có)
     if "crud_message" in st.session_state:
         st.success(st.session_state["crud_message"])
         del st.session_state["crud_message"]
@@ -126,12 +125,12 @@ with tab2:
             ],
         )
 
-    st.markdown(f"### Danh sách {selected_collection} gần đây")
+    st.markdown(f"### Danh sách {selected_collection} gần đây (Mới nhất ở trên cùng)")
 
     if db is not None:
         try:
             coll = db[selected_collection]
-            data = list(coll.find().limit(100))
+            data = list(coll.find().sort("_id", -1).limit(100))
             if data:
                 df = pd.DataFrame(data)
                 if "_id" in df.columns:
@@ -261,16 +260,30 @@ with tab2:
         else:
             st.warning("⚠️ Vui lòng đăng nhập tài khoản Admin tại Tab 'Hệ Thống & Quản Trị' để thực hiện thao tác này.")
 
-    # --- CRUD: CẬP NHẬT BẢN GHI ---
+    # --- CRUD: CẬP NHẬT BẢN GHI (TỰ ĐỘNG CHỌN TRƯỜNG THEO BẢNG) ---
     elif crud_action == "Cập nhật bản ghi":
         st.markdown("---")
-        st.subheader(f"Cập nhật thông tin trong {selected_collection}")
+        st.subheader(f"Cập nhật thông tin trong `{selected_collection}`")
         if is_admin:
+            # Danh sách trường khả dụng theo từng collection
+            field_options = {
+                "clean_customers": ["name", "email", "phone", "address"],
+                "clean_orders": ["status", "shipping_address", "total_amount", "order_date"],
+                "clean_products": ["product_name", "category", "price"],
+                "clean_reviews": ["rating", "comment", "review_date"]
+            }
+            id_label = {
+                "clean_customers": "customer_id",
+                "clean_orders": "order_id",
+                "clean_products": "product_id",
+                "clean_reviews": "review_id"
+            }.get(selected_collection, "ID")
+
             with st.form("update_record_form"):
-                target_id = st.text_input("Nhập mã bản ghi cần sửa (customer_id, order_id, product_id hoặc review_id)")
+                target_id = st.text_input(f"Nhập mã bản ghi cần sửa ({id_label} hoặc _id)")
                 col1, col2 = st.columns(2)
                 with col1:
-                    field_name = st.text_input("Tên trường cần cập nhật (ví dụ: name, status, price, email, address)")
+                    field_name = st.selectbox("Chọn trường cần cập nhật", field_options.get(selected_collection, ["name"]))
                 with col2:
                     new_value = st.text_input("Giá trị mới")
 
@@ -287,13 +300,20 @@ with tab2:
                             except Exception:
                                 pass
 
-                        val_to_set = float(new_value) if new_value.replace('.', '', 1).isdigit() and '.' in new_value else (int(new_value) if new_value.isdigit() else new_value)
+                        # Ép kiểu dữ liệu tự động cho số
+                        val_str = new_value.strip()
+                        if field_name in ["total_amount", "price"]:
+                            val_to_set = float(val_str) if val_str.replace('.', '', 1).isdigit() else val_str
+                        elif field_name in ["rating"]:
+                            val_to_set = int(val_str) if val_str.isdigit() else val_str
+                        else:
+                            val_to_set = val_str
 
                         res = db[selected_collection].update_many(
                             {"$or": conditions}, {"$set": {field_name: val_to_set}}
                         )
                         if res.modified_count > 0 or res.matched_count > 0:
-                            st.session_state["crud_message"] = f"✅ Đã cập nhật thành công {res.modified_count} bản ghi trong `{selected_collection}`!"
+                            st.session_state["crud_message"] = f"✅ Đã cập nhật thành công trường `{field_name}` trong `{selected_collection}`!"
                             st.rerun()
                         else:
                             st.error("❌ Không tìm thấy mã ID tương ứng để cập nhật.")
@@ -302,13 +322,20 @@ with tab2:
         else:
             st.warning("⚠️ Vui lòng đăng nhập tài khoản Admin tại Tab 'Hệ Thống & Quản Trị' để thực hiện thao tác này.")
 
-    # --- CRUD: XÓA BẢN GHI ---
+    # --- CRUD: XÓA BẢN GHI (GỢI Ý TÊN MÃ TƯƠNG ỨNG) ---
     elif crud_action == "Xóa bản ghi":
         st.markdown("---")
-        st.subheader(f"Xóa bản ghi khỏi {selected_collection}")
+        st.subheader(f"Xóa bản ghi khỏi `{selected_collection}`")
         if is_admin:
+            id_hint = {
+                "clean_customers": "customer_id",
+                "clean_orders": "order_id",
+                "clean_products": "product_id",
+                "clean_reviews": "review_id"
+            }.get(selected_collection, "ID")
+
             with st.form("delete_record_form"):
-                delete_id = st.text_input("Nhập ID bản ghi cần xóa (customer_id, order_id, product_id, review_id hoặc _id)")
+                delete_id = st.text_input(f"Nhập ID bản ghi cần xóa ({id_hint} hoặc _id)")
                 submit_delete = st.form_submit_button("Xóa bản ghi này")
 
                 if submit_delete and db is not None:
@@ -347,73 +374,85 @@ with tab2:
         else:
             st.warning("⚠️ Vui lòng đăng nhập tài khoản Admin tại Tab 'Hệ Thống & Quản Trị' để thực hiện thao tác này.")
 
-# ================= TAB 3: LỌC & TÌM KIẾM =================
+# ================= TAB 3: LỌC & TÌM KIẾM CẢ 4 COLLECTIONS =================
 with tab3:
-    st.subheader("Lọc & Tìm Kiếm Đơn Hàng Nâng Cao")
+    st.subheader("Lọc & Tìm Kiếm Nâng Cao")
     st.markdown("---")
 
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        search_kw = st.text_input("Tìm theo Mã Đơn Hàng / Mã Khách Hàng")
-    with col2:
-        status_filter = st.multiselect(
-            "Lọc theo trạng thái",
-            ["Completed", "Pending", "Cancelled", "shipped", "delivered"],
-        )
-    with col3:
-        min_val, max_val = st.slider(
-            "Khoảng giá trị đơn hàng (VNĐ)",
-            0,
-            100000000,
-            (0, 100000000),
-            step=1000000,
-        )
+    filter_collection = st.selectbox(
+        "Chọn Collection cần lọc & tìm kiếm:",
+        ["clean_orders", "clean_customers", "clean_products", "clean_reviews"]
+    )
+
+    if filter_collection == "clean_orders":
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            search_kw = st.text_input("Tìm theo Mã Đơn / Mã Khách Hàng")
+        with col2:
+            status_filter = st.multiselect(
+                "Trạng thái",
+                ["Completed", "Pending", "Cancelled", "shipped", "delivered"],
+            )
+        with col3:
+            min_val, max_val = st.slider(
+                "Khoảng giá trị đơn (VNĐ)",
+                0, 100000000, (0, 100000000), step=1000000,
+            )
+    elif filter_collection == "clean_customers":
+        col1, col2 = st.columns(2)
+        with col1:
+            search_kw = st.text_input("Tìm theo Mã Khách Hàng / Tên / Email / SĐT")
+        with col2:
+            status_filter = None
+            min_val, max_val = None, None
+    elif filter_collection == "clean_products":
+        col1, col2 = st.columns(2)
+        with col1:
+            search_kw = st.text_input("Tìm theo Mã SP / Tên SP / Danh Mục")
+        with col2:
+            min_val, max_val = st.slider(
+                "Khoảng giá sản phẩm (VNĐ)",
+                0, 10000000, (0, 10000000), step=100000,
+            )
+            status_filter = None
+    else: # clean_reviews
+        col1, col2 = st.columns(2)
+        with col1:
+            search_kw = st.text_input("Tìm theo Mã Đánh Giá / Mã SP / Nội Dung")
+        with col2:
+            status_filter = st.multiselect("Số sao đánh giá (Rating)", [1, 2, 3, 4, 5])
+            min_val, max_val = None, None
 
     if db is not None:
         try:
-            coll = (
-                db["clean_orders"]
-                if "clean_orders" in db.list_collection_names()
-                else db["orders"]
-            )
-            results = list(coll.find().limit(500))
+            coll = db[filter_collection]
+            results = list(coll.find().sort("_id", -1).limit(500))
 
             if results:
                 df_res = pd.DataFrame(results)
 
-                val_column = None
-                for col_name in [
-                    "total_amount",
-                    "order_value",
-                    "price",
-                    "amount",
-                    "value",
-                ]:
-                    if col_name in df_res.columns:
-                        val_column = col_name
-                        break
+                # Lọc giá tiền (nếu có)
+                if min_val is not None and max_val is not None:
+                    val_column = "total_amount" if "total_amount" in df_res.columns else ("price" if "price" in df_res.columns else None)
+                    if val_column:
+                        df_res[val_column] = pd.to_numeric(df_res[val_column], errors="coerce").fillna(0)
+                        df_res = df_res[(df_res[val_column] >= min_val) & (df_res[val_column] <= max_val)]
 
-                if val_column:
-                    df_res[val_column] = pd.to_numeric(
-                        df_res[val_column], errors="coerce"
-                    ).fillna(0)
-                    df_res = df_res[
-                        (df_res[val_column] >= min_val)
-                        & (df_res[val_column] <= max_val)
-                    ]
-
+                # Lọc từ khóa tìm kiếm
                 if search_kw.strip():
                     kw = search_kw.strip().lower()
                     mask = False
-                    for id_col in ["order_id", "customer_id", "_id"]:
+                    for id_col in ["order_id", "customer_id", "product_id", "review_id", "name", "email", "phone", "product_name", "category", "comment", "shipping_address", "_id"]:
                         if id_col in df_res.columns:
-                            mask = mask | df_res[id_col].astype(str).str.lower().str.contains(
-                                kw, na=False
-                            )
+                            mask = mask | df_res[id_col].astype(str).str.lower().str.contains(kw, na=False)
                     df_res = df_res[mask]
 
-                if status_filter and "status" in df_res.columns:
-                    df_res = df_res[df_res["status"].isin(status_filter)]
+                # Lọc trạng thái / Rating
+                if status_filter:
+                    if "status" in df_res.columns:
+                        df_res = df_res[df_res["status"].isin(status_filter)]
+                    elif "rating" in df_res.columns:
+                        df_res = df_res[df_res["rating"].isin(status_filter)]
 
                 if "_id" in df_res.columns:
                     df_res["_id"] = df_res["_id"].astype(str)
@@ -424,10 +463,10 @@ with tab3:
                         else str(x)
                     )
 
-                st.write(f"Tìm thấy **{len(df_res)}** kết quả phù hợp:")
+                st.write(f"Tìm thấy **{len(df_res)}** kết quả trong `{filter_collection}`:")
                 st.dataframe(df_res, use_container_width=True)
             else:
-                st.warning("Không tìm thấy dữ liệu trong CSDL để lọc.")
+                st.warning("Không tìm thấy dữ liệu trong CSDL.")
         except Exception as e:
             st.error(f"Lỗi khi lọc dữ liệu: {e}")
     else:
@@ -634,7 +673,6 @@ with tab5:
                 st.markdown("##### Phục Hồi Dữ Liệu (Restore)")
                 if st.button("Chạy Lệnh Phục Hồi CSDL (mongorestore)"):
                     try:
-                        # Tự động quét thư mục chứa file .bson
                         target_restore_dir = None
                         search_dirs = ["./mongodb_backup", "./dump"]
                         for base in search_dirs:
@@ -649,7 +687,6 @@ with tab5:
                         if not target_restore_dir:
                             st.error("❌ Không tìm thấy thư mục tệp sao lưu (.bson). Vui lòng thực hiện Sao Lưu trước!")
                         else:
-                            # Lệnh restore sử dụng --drop để ghi đè sạch dữ liệu cũ
                             cmd = f'"{restore_bin}" --uri="{mongo_uri}" --drop "{target_restore_dir}"'
                             result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
 
@@ -668,7 +705,7 @@ with tab5:
         if db is not None:
             try:
                 coll = db["clean_orders"] if "clean_orders" in db.list_collection_names() else db["orders"]
-                data = list(coll.find().limit(500))
+                data = list(coll.find().sort("_id", -1).limit(500))
                 
                 if data:
                     df_report = pd.DataFrame(data)
