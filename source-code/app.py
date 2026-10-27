@@ -113,7 +113,7 @@ with tab2:
         horizontal=True,
     )
 
-    col_target, _ = st.columns([2, 2])
+    col_target, col_limit = st.columns([2, 2])
     with col_target:
         selected_collection = st.selectbox(
             "Chọn Collection CSDL:",
@@ -124,13 +124,25 @@ with tab2:
                 "clean_reviews",
             ],
         )
+    with col_limit:
+        limit_option = st.selectbox(
+            "Số lượng bản ghi hiển thị:",
+            [100, 200, 500, 1000, "Tất cả (Toàn bộ)"],
+            index=0
+        )
 
-    st.markdown(f"### Danh sách {selected_collection} gần đây (Mới nhất ở trên cùng)")
+    st.markdown(f"### Danh sách {selected_collection} gần đây ({limit_option})")
 
     if db is not None:
         try:
             coll = db[selected_collection]
-            data = list(coll.find().sort("_id", -1).limit(100))
+            
+            # Truy vấn sắp xếp mới nhất ở trên cùng
+            if limit_option == "Tất cả (Toàn bộ)":
+                data = list(coll.find().sort("_id", -1))
+            else:
+                data = list(coll.find().sort("_id", -1).limit(int(limit_option)))
+
             if data:
                 df = pd.DataFrame(data)
                 if "_id" in df.columns:
@@ -141,6 +153,7 @@ with tab2:
                         if isinstance(x, list)
                         else str(x)
                     )
+                st.write(f"📊 Đang hiển thị **{len(df)}** bản ghi trong `{selected_collection}`:")
                 st.dataframe(df, use_container_width=True)
             else:
                 st.info(f"Chưa có dữ liệu trong Collection '{selected_collection}'.")
@@ -260,12 +273,11 @@ with tab2:
         else:
             st.warning("⚠️ Vui lòng đăng nhập tài khoản Admin tại Tab 'Hệ Thống & Quản Trị' để thực hiện thao tác này.")
 
-    # --- CRUD: CẬP NHẬT BẢN GHI (TỰ ĐỘNG CHỌN TRƯỜNG THEO BẢNG) ---
+    # --- CRUD: CẬP NHẬT BẢN GHI ---
     elif crud_action == "Cập nhật bản ghi":
         st.markdown("---")
         st.subheader(f"Cập nhật thông tin trong `{selected_collection}`")
         if is_admin:
-            # Danh sách trường khả dụng theo từng collection
             field_options = {
                 "clean_customers": ["name", "email", "phone", "address"],
                 "clean_orders": ["status", "shipping_address", "total_amount", "order_date"],
@@ -300,7 +312,6 @@ with tab2:
                             except Exception:
                                 pass
 
-                        # Ép kiểu dữ liệu tự động cho số
                         val_str = new_value.strip()
                         if field_name in ["total_amount", "price"]:
                             val_to_set = float(val_str) if val_str.replace('.', '', 1).isdigit() else val_str
@@ -322,7 +333,7 @@ with tab2:
         else:
             st.warning("⚠️ Vui lòng đăng nhập tài khoản Admin tại Tab 'Hệ Thống & Quản Trị' để thực hiện thao tác này.")
 
-    # --- CRUD: XÓA BẢN GHI (GỢI Ý TÊN MÃ TƯƠNG ỨNG) ---
+    # --- CRUD: XÓA BẢN GHI ---
     elif crud_action == "Xóa bản ghi":
         st.markdown("---")
         st.subheader(f"Xóa bản ghi khỏi `{selected_collection}`")
@@ -431,14 +442,12 @@ with tab3:
             if results:
                 df_res = pd.DataFrame(results)
 
-                # Lọc giá tiền (nếu có)
                 if min_val is not None and max_val is not None:
                     val_column = "total_amount" if "total_amount" in df_res.columns else ("price" if "price" in df_res.columns else None)
                     if val_column:
                         df_res[val_column] = pd.to_numeric(df_res[val_column], errors="coerce").fillna(0)
                         df_res = df_res[(df_res[val_column] >= min_val) & (df_res[val_column] <= max_val)]
 
-                # Lọc từ khóa tìm kiếm
                 if search_kw.strip():
                     kw = search_kw.strip().lower()
                     mask = False
@@ -447,7 +456,6 @@ with tab3:
                             mask = mask | df_res[id_col].astype(str).str.lower().str.contains(kw, na=False)
                     df_res = df_res[mask]
 
-                # Lọc trạng thái / Rating
                 if status_filter:
                     if "status" in df_res.columns:
                         df_res = df_res[df_res["status"].isin(status_filter)]
