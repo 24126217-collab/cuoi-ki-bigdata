@@ -8,12 +8,14 @@ from bson.objectid import ObjectId
 import streamlit as st
 import streamlit.components.v1 as components
 
+# ================= CẤU HÌNH TRANG WEB =================
 st.set_page_config(
     page_title="E-Commerce Analytics & AI Web Platform",
     layout="wide",
     initial_sidebar_state="collapsed"
 )
 
+# ================= ĐỌC VÀ LƯU CACHE KẾT NỐI CSDL =================
 @st.cache_resource
 def init_db_connection():
     try:
@@ -26,6 +28,7 @@ def init_db_connection():
         st.error(f"Lỗi kết nối MongoDB Atlas: {e}")
         return None
 
+# ================= NẠP CÁC MÔ HÌNH MACHINE LEARNING =================
 @st.cache_resource
 def load_ml_models():
     models = {}
@@ -50,6 +53,7 @@ def load_ml_models():
 db = init_db_connection()
 models = load_ml_models()
 
+# ================= QUẢN LÝ PHIÊN DÙNG (SESSION STATE) =================
 if "logged_in" not in st.session_state:
     st.session_state["logged_in"] = False
 if "username" not in st.session_state:
@@ -71,8 +75,9 @@ def login(username, password):
     else:
         st.error("Tên đăng nhập hoặc mật khẩu không đúng.")
 
+# ================= TIÊU ĐỀ HỆ THỐNG =================
 st.title("E-Commerce Analytics & AI Web Platform")
-st.caption("Phụ trách kỹ thuật: Nguyễn Quốc Thiên — Fullstack Developer & BI Specialist")
+st.caption("Ứng dụng Phân tích Dữ liệu lớn và Học máy trong Tối ưu hóa Chiến lược Kinh doanh trên Sàn Thương mại Điện tử Shopee")
 
 tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "Power BI Dashboard",
@@ -84,14 +89,15 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs([
 
 # ================= TAB 1: POWER BI DASHBOARD =================
 with tab1:
-    st.subheader("Báo Cáo Kinh Doanh (Power BI Dashboard)")
+    st.subheader("Báo Cáo Phân Tích & Tối Ưu Chiến Lược Kinh Doanh Shopee")
+    st.caption("Hệ thống Power BI Dashboard tương tác xử lý Dữ liệu lớn từ CSDL MongoDB Cloud")
     st.markdown("---")
 
     powerbi_url = "https://app.powerbi.com/reportEmbed?reportId=e6967a85-8534-4db7-85d2-ed9e53ce1219&autoAuth=true&ctid=f069fbab-b0f7-4e8c-a14c-d042ab513525"
 
     st.info(
-        "Báo cáo hiển thị trực tiếp bên dưới. Đảm bảo tài khoản Microsoft của"
-        " nhóm đã được cấp quyền truy cập trên Power BI Service."
+        "📊 Báo cáo hiển thị trực quan các chỉ số KPI kinh doanh, phân cụm khách hàng và hiệu quả vận hành gian hàng Shopee. "
+        "Đảm bảo tài khoản Microsoft của nhóm đã được cấp quyền truy cập trên Power BI Service."
     )
 
     components.iframe(src=powerbi_url, width=1200, height=650, scrolling=True)
@@ -99,9 +105,7 @@ with tab1:
 # ================= TAB 2: QUẢN LÝ DỮ LIỆU (CRUD) =================
 with tab2:
     st.subheader("Quản Lý Dữ Liệu Đơn Hàng & Khách Hàng (CRUD)")
-    st.info(
-        "Khu vực cho phép Thêm, Xem, Sửa, Xóa dữ liệu trực tiếp trong CSDL MongoDB Cloud."
-    )
+    st.info("Khu vực cho phép Thêm, Xem, Sửa, Xóa dữ liệu trực tiếp trong CSDL MongoDB Cloud.")
 
     if "crud_message" in st.session_state:
         st.success(st.session_state["crud_message"])
@@ -117,12 +121,7 @@ with tab2:
     with col_target:
         selected_collection = st.selectbox(
             "Chọn Collection CSDL:",
-            [
-                "clean_orders",
-                "clean_customers",
-                "clean_products",
-                "clean_reviews",
-            ],
+            ["clean_orders", "clean_customers", "clean_products", "clean_reviews"],
         )
     with col_limit:
         limit_option = st.selectbox(
@@ -136,8 +135,6 @@ with tab2:
     if db is not None:
         try:
             coll = db[selected_collection]
-            
-            # Truy vấn sắp xếp mới nhất ở trên cùng
             if limit_option == "Tất cả (Toàn bộ)":
                 data = list(coll.find().sort("_id", -1))
             else:
@@ -164,7 +161,7 @@ with tab2:
 
     is_admin = st.session_state.get("role") == "Admin"
 
-    # --- CRUD: THÊM BẢN GHI MỚI ---
+    # --- CRUD: THÊM BẢN GHI MỚI (CÓ KIỂM TRA TRÙNG LẶP) ---
     if crud_action == "Thêm bản ghi mới":
         st.markdown("---")
         st.subheader(f"Thêm bản ghi mới vào `{selected_collection}`")
@@ -263,13 +260,88 @@ with tab2:
                             "review_date": review_date.strip()
                         }
 
+                # --- XỬ LÝ KIỂM TRA TRÙNG LẶP KHI BẤM THÊM ---
                 if submitted and db is not None:
                     try:
-                        db[selected_collection].insert_one(new_doc)
-                        st.session_state["crud_message"] = f"✅ Đã thêm bản ghi mới thành công vào `{selected_collection}`!"
-                        st.rerun()
+                        coll = db[selected_collection]
+                        is_duplicate = False
+                        dup_reason = ""
+
+                        if selected_collection == "clean_customers":
+                            c_id = new_doc.get("customer_id")
+                            email = new_doc.get("email")
+                            phone = new_doc.get("phone")
+                            query = {
+                                "$or": [
+                                    {"customer_id": c_id},
+                                    {"customer_id": str(c_id)},
+                                    {"email": email},
+                                    {"phone": phone}
+                                ]
+                            }
+                            existing = coll.find_one(query)
+                            if existing:
+                                is_duplicate = True
+                                if existing.get("customer_id") in [c_id, str(c_id)]:
+                                    dup_reason = f"Mã khách hàng (customer_id = {c_id}) đã tồn tại!"
+                                elif existing.get("email") == email:
+                                    dup_reason = f"Email ({email}) đã được đăng ký!"
+                                else:
+                                    dup_reason = f"Số điện thoại ({phone}) đã tồn tại!"
+
+                        elif selected_collection == "clean_orders":
+                            o_id = new_doc.get("order_id")
+                            query = {
+                                "$or": [
+                                    {"order_id": o_id},
+                                    {"order_id": str(o_id)}
+                                ]
+                            }
+                            existing = coll.find_one(query)
+                            if existing:
+                                is_duplicate = True
+                                dup_reason = f"Mã đơn hàng (order_id = {o_id}) đã tồn tại!"
+
+                        elif selected_collection == "clean_products":
+                            p_id = new_doc.get("product_id")
+                            p_name = new_doc.get("product_name")
+                            query = {
+                                "$or": [
+                                    {"product_id": p_id},
+                                    {"product_id": str(p_id)},
+                                    {"product_name": p_name}
+                                ]
+                            }
+                            existing = coll.find_one(query)
+                            if existing:
+                                is_duplicate = True
+                                if existing.get("product_id") in [p_id, str(p_id)]:
+                                    dup_reason = f"Mã sản phẩm (product_id = {p_id}) đã tồn tại!"
+                                else:
+                                    dup_reason = f"Tên sản phẩm '{p_name}' đã có trong danh mục!"
+
+                        elif selected_collection == "clean_reviews":
+                            r_id = new_doc.get("review_id")
+                            query = {
+                                "$or": [
+                                    {"review_id": r_id},
+                                    {"review_id": str(r_id)}
+                                ]
+                            }
+                            existing = coll.find_one(query)
+                            if existing:
+                                is_duplicate = True
+                                dup_reason = f"Mã đánh giá (review_id = {r_id}) đã tồn tại!"
+
+                        if is_duplicate:
+                            st.error(f"❌ **THÊM THẤT BẠI DO TRÙNG LẶP DỮ LIỆU!**\n\nChi tiết: {dup_reason}. Vui lòng nhập thông tin mới hoàn toàn.")
+                        else:
+                            coll.insert_one(new_doc)
+                            st.session_state["crud_message"] = f"✅ Đã thêm bản ghi mới thành công vào `{selected_collection}`!"
+                            st.rerun()
+
                     except Exception as e:
-                        st.error(f"❌ Thêm bản ghi thất bại! Lỗi: {e}")
+                        st.error(f"❌ Lỗi xử lý CSDL: {e}")
         else:
             st.warning("⚠️ Vui lòng đăng nhập tài khoản Admin tại Tab 'Hệ Thống & Quản Trị' để thực hiện thao tác này.")
 
@@ -631,6 +703,7 @@ with tab5:
     
     sys_tab1, sys_tab2, sys_tab3 = st.tabs(["Xác Thực Người Dùng", "Sao Lưu & Phục Hồi CSDL (TV1)", "Kết Xuất Báo Cáo"])
 
+    # --- SUB-TAB 1: XÁC THỰC NGƯỜI DÙNG ---
     with sys_tab1:
         st.markdown("#### Đăng Nhập Quản Trị Hệ Thống")
         if not st.session_state["logged_in"]:
@@ -645,6 +718,7 @@ with tab5:
                 st.session_state["role"] = "Guest"
                 st.rerun()
 
+    # --- SUB-TAB 2: SAO LƯU & PHỤC HỒI CSDL (TV1 CORE) ---
     with sys_tab2:
         st.markdown("#### Quản Lý Backup & Restore CSDL (TV1)")
 
@@ -661,6 +735,7 @@ with tab5:
             dump_bin = "mongodump.exe" if os.path.exists("mongodump.exe") else "mongodump"
             restore_bin = "mongorestore.exe" if os.path.exists("mongorestore.exe") else "mongorestore"
 
+            # 1. Sao lưu dữ liệu (mongodump)
             with col_b1:
                 st.markdown("##### Sao Lưu Dữ Liệu (Backup)")
                 if st.button("Chạy Lệnh Sao Lưu CSDL (mongodump)"):
@@ -677,6 +752,7 @@ with tab5:
                     except Exception as e:
                         st.error(f"Lỗi khi thực hiện sao lưu: {e}")
 
+            # 2. Phục hồi dữ liệu (mongorestore với cờ --drop)
             with col_b2:
                 st.markdown("##### Phục Hồi Dữ Liệu (Restore)")
                 if st.button("Chạy Lệnh Phục Hồi CSDL (mongorestore)"):
@@ -708,6 +784,7 @@ with tab5:
         else:
             st.warning("⚠️ Yêu cầu đăng nhập tài khoản Admin để thực hiện tính năng Backup/Restore.")
 
+    # --- SUB-TAB 3: KẾT XUẤT BÁO CÁO hệ THỐNG ---
     with sys_tab3:
         st.markdown("#### Kết Xuất Báo Cáo Hệ Thống")
         if db is not None:
