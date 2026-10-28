@@ -145,7 +145,7 @@ with tab2:
                 if "_id" in df.columns:
                     df["_id"] = df["_id"].astype(str)
 
-                # --- CHUẨN HÓA DỮ LIỆU ĐỒNG BỘ CHO CLEAN_PRODUCTS ---
+                # --- CHUẨN HÓA ĐỒNG BỘ DỮ LIỆU CLEAN_PRODUCTS ---
                 if selected_collection == "clean_products":
                     if "name" in df.columns and "product_name" in df.columns:
                         df["product_name"] = df["product_name"].fillna(df["name"])
@@ -165,6 +165,16 @@ with tab2:
 
                     if "product_id" in df.columns:
                         df["product_id"] = df["product_id"].fillna(df["_id"])
+
+                # --- CHUẨN HÓA ĐỒNG BỘ DỮ LIỆU CLEAN_REVIEWS ---
+                elif selected_collection == "clean_reviews":
+                    if "created_at" in df.columns and "review_date" in df.columns:
+                        df["review_date"] = df["review_date"].fillna(df["created_at"])
+                        df["created_at"] = df["created_at"].fillna(df["review_date"])
+                    elif "created_at" in df.columns and "review_date" not in df.columns:
+                        df["review_date"] = df["created_at"]
+                    elif "review_date" in df.columns and "created_at" not in df.columns:
+                        df["created_at"] = df["review_date"]
 
                 if "items" in df.columns:
                     df["items"] = df["items"].apply(
@@ -250,7 +260,6 @@ with tab2:
                     submitted = st.form_submit_button("Thêm sản phẩm")
                     if submitted:
                         val_p_id = int(product_id.strip()) if product_id.strip().isdigit() else product_id.strip()
-                        # Lưu đồng thời cả hai chuẩn tên trường (Old & New Schema)
                         new_doc = {
                             "product_id": val_p_id,
                             "product_name": product_name.strip(),
@@ -276,13 +285,15 @@ with tab2:
                         val_r_id = int(review_id.strip()) if review_id.strip().isdigit() else review_id.strip()
                         val_c_id = int(customer_id.strip()) if customer_id.strip().isdigit() else customer_id.strip()
                         val_p_id = int(product_id.strip()) if product_id.strip().isdigit() else product_id.strip()
+                        # Lưu đồng thời cả hai trường review_date và created_at
                         new_doc = {
                             "review_id": val_r_id,
                             "customer_id": val_c_id,
                             "product_id": val_p_id,
                             "rating": rating,
                             "comment": comment.strip(),
-                            "review_date": review_date.strip()
+                            "review_date": review_date.strip(),
+                            "created_at": review_date.strip()
                         }
 
                 # --- XỬ LÝ KIỂM TRA TRÙNG LẶP KHI BẤM THÊM ---
@@ -418,11 +429,13 @@ with tab2:
                         else:
                             val_to_set = val_str
 
-                        # Đồng bộ cập nhật cho cả trường cũ lẫn mới của clean_products
+                        # Đồng bộ cập nhật cho cả trường cũ lẫn mới
                         if field_name == "product_name":
                             update_dict = {"product_name": val_to_set, "name": val_to_set}
                         elif field_name == "category":
                             update_dict = {"category": val_to_set, "category_id": val_to_set}
+                        elif field_name == "review_date":
+                            update_dict = {"review_date": val_to_set, "created_at": val_to_set}
                         else:
                             update_dict = {field_name: val_to_set}
 
@@ -561,6 +574,13 @@ with tab3:
                         df_res["category_id"] = df_res["category_id"].fillna(df_res["category"])
                     elif "category_id" in df_res.columns and "category" not in df_res.columns:
                         df_res["category"] = df_res["category_id"]
+
+                elif filter_collection == "clean_reviews":
+                    if "created_at" in df_res.columns and "review_date" in df_res.columns:
+                        df_res["review_date"] = df_res["review_date"].fillna(df_res["created_at"])
+                        df_res["created_at"] = df_res["created_at"].fillna(df_res["review_date"])
+                    elif "created_at" in df_res.columns and "review_date" not in df_res.columns:
+                        df_res["review_date"] = df_res["created_at"]
 
                 if min_val is not None and max_val is not None:
                     val_column = "total_amount" if "total_amount" in df_res.columns else ("price" if "price" in df_res.columns else None)
