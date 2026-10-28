@@ -144,9 +144,31 @@ with tab2:
                 df = pd.DataFrame(data)
                 if "_id" in df.columns:
                     df["_id"] = df["_id"].astype(str)
+
+                # --- CHUẨN HÓA DỮ LIỆU ĐỒNG BỘ CHO CLEAN_PRODUCTS ---
+                if selected_collection == "clean_products":
+                    if "name" in df.columns and "product_name" in df.columns:
+                        df["product_name"] = df["product_name"].fillna(df["name"])
+                        df["name"] = df["name"].fillna(df["product_name"])
+                    elif "name" in df.columns and "product_name" not in df.columns:
+                        df["product_name"] = df["name"]
+                    elif "product_name" in df.columns and "name" not in df.columns:
+                        df["name"] = df["product_name"]
+
+                    if "category_id" in df.columns and "category" in df.columns:
+                        df["category"] = df["category"].fillna(df["category_id"])
+                        df["category_id"] = df["category_id"].fillna(df["category"])
+                    elif "category_id" in df.columns and "category" not in df.columns:
+                        df["category"] = df["category_id"]
+                    elif "category" in df.columns and "category_id" not in df.columns:
+                        df["category_id"] = df["category"]
+
+                    if "product_id" in df.columns:
+                        df["product_id"] = df["product_id"].fillna(df["_id"])
+
                 if "items" in df.columns:
                     df["items"] = df["items"].apply(
-                        lambda x: ", ".join([str(i.get("product_name", "")) for i in x])
+                        lambda x: ", ".join([str(i.get("product_name", i.get("name", ""))) for i in x])
                         if isinstance(x, list)
                         else str(x)
                     )
@@ -161,7 +183,7 @@ with tab2:
 
     is_admin = st.session_state.get("role") == "Admin"
 
-    # --- CRUD: THÊM BẢN GHI MỚI (CÓ KIỂM TRA TRÙNG LẶP) ---
+    # --- CRUD: THÊM BẢN GHI MỚI ---
     if crud_action == "Thêm bản ghi mới":
         st.markdown("---")
         st.subheader(f"Thêm bản ghi mới vào `{selected_collection}`")
@@ -228,11 +250,14 @@ with tab2:
                     submitted = st.form_submit_button("Thêm sản phẩm")
                     if submitted:
                         val_p_id = int(product_id.strip()) if product_id.strip().isdigit() else product_id.strip()
+                        # Lưu đồng thời cả hai chuẩn tên trường (Old & New Schema)
                         new_doc = {
                             "product_id": val_p_id,
                             "product_name": product_name.strip(),
+                            "name": product_name.strip(),
                             "price": price,
-                            "category": category.strip()
+                            "category": category.strip(),
+                            "category_id": category.strip()
                         }
 
                 elif selected_collection == "clean_reviews":
@@ -309,7 +334,8 @@ with tab2:
                                 "$or": [
                                     {"product_id": p_id},
                                     {"product_id": str(p_id)},
-                                    {"product_name": p_name}
+                                    {"product_name": p_name},
+                                    {"name": p_name}
                                 ]
                             }
                             existing = coll.find_one(query)
@@ -392,8 +418,16 @@ with tab2:
                         else:
                             val_to_set = val_str
 
+                        # Đồng bộ cập nhật cho cả trường cũ lẫn mới của clean_products
+                        if field_name == "product_name":
+                            update_dict = {"product_name": val_to_set, "name": val_to_set}
+                        elif field_name == "category":
+                            update_dict = {"category": val_to_set, "category_id": val_to_set}
+                        else:
+                            update_dict = {field_name: val_to_set}
+
                         res = db[selected_collection].update_many(
-                            {"$or": conditions}, {"$set": {field_name: val_to_set}}
+                            {"$or": conditions}, {"$set": update_dict}
                         )
                         if res.modified_count > 0 or res.matched_count > 0:
                             st.session_state["crud_message"] = f"✅ Đã cập nhật thành công trường `{field_name}` trong `{selected_collection}`!"
@@ -514,6 +548,20 @@ with tab3:
             if results:
                 df_res = pd.DataFrame(results)
 
+                # Chuẩn hóa dữ liệu hiển thị cho Tab 3
+                if filter_collection == "clean_products":
+                    if "name" in df_res.columns and "product_name" in df_res.columns:
+                        df_res["product_name"] = df_res["product_name"].fillna(df_res["name"])
+                        df_res["name"] = df_res["name"].fillna(df_res["product_name"])
+                    elif "name" in df_res.columns and "product_name" not in df_res.columns:
+                        df_res["product_name"] = df_res["name"]
+
+                    if "category_id" in df_res.columns and "category" in df_res.columns:
+                        df_res["category"] = df_res["category"].fillna(df_res["category_id"])
+                        df_res["category_id"] = df_res["category_id"].fillna(df_res["category"])
+                    elif "category_id" in df_res.columns and "category" not in df_res.columns:
+                        df_res["category"] = df_res["category_id"]
+
                 if min_val is not None and max_val is not None:
                     val_column = "total_amount" if "total_amount" in df_res.columns else ("price" if "price" in df_res.columns else None)
                     if val_column:
@@ -523,7 +571,7 @@ with tab3:
                 if search_kw.strip():
                     kw = search_kw.strip().lower()
                     mask = False
-                    for id_col in ["order_id", "customer_id", "product_id", "review_id", "name", "email", "phone", "product_name", "category", "comment", "shipping_address", "_id"]:
+                    for id_col in ["order_id", "customer_id", "product_id", "review_id", "name", "email", "phone", "product_name", "category", "category_id", "comment", "shipping_address", "_id"]:
                         if id_col in df_res.columns:
                             mask = mask | df_res[id_col].astype(str).str.lower().str.contains(kw, na=False)
                     df_res = df_res[mask]
@@ -538,7 +586,7 @@ with tab3:
                     df_res["_id"] = df_res["_id"].astype(str)
                 if "items" in df_res.columns:
                     df_res["items"] = df_res["items"].apply(
-                        lambda x: ", ".join([str(i.get("product_name", "")) for i in x])
+                        lambda x: ", ".join([str(i.get("product_name", i.get("name", ""))) for i in x])
                         if isinstance(x, list)
                         else str(x)
                     )
@@ -784,7 +832,7 @@ with tab5:
         else:
             st.warning("⚠️ Yêu cầu đăng nhập tài khoản Admin để thực hiện tính năng Backup/Restore.")
 
-    # --- SUB-TAB 3: KẾT XUẤT BÁO CÁO hệ THỐNG ---
+    # --- SUB-TAB 3: KẾT XUẤT BÁO CÁO HỆ THỐNG ---
     with sys_tab3:
         st.markdown("#### Kết Xuất Báo Cáo Hệ Thống")
         if db is not None:
@@ -797,7 +845,7 @@ with tab5:
                     if "_id" in df_report.columns:
                         df_report["_id"] = df_report["_id"].astype(str)
                     if "items" in df_report.columns:
-                        df_report["items"] = df_report["items"].apply(lambda x: ", ".join([str(i.get("product_name", "")) for i in x]) if isinstance(x, list) else str(x))
+                        df_report["items"] = df_report["items"].apply(lambda x: ", ".join([str(i.get("product_name", i.get("name", ""))) for i in x]) if isinstance(x, list) else str(x))
 
                     csv_data = df_report.to_csv(index=False).encode('utf-8-sig')
                     
